@@ -8,10 +8,10 @@ import os
 import logging
 import asyncio
 
-
+# =============== LOAD ENVIRONMENT VARIABLES ===============
 load_dotenv()
 
-# =============== LOGGING ===============
+# =============== LOGGING SETUP ===============
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("my_bot")
 
@@ -20,7 +20,7 @@ mongo_uri = os.getenv("MONGODB_URI")
 client = MongoClient(mongo_uri)
 db = client.get_database(os.getenv("MONGODB_DB_NAME"))
 
-# Example references you might store:
+# MongoDB collections for use in cogs
 guild_settings = db.guildSettings
 moderation_logs = db.moderationLogs
 levels = db.levels
@@ -35,7 +35,7 @@ intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 tree = bot.tree  # For slash commands
 
-# Optionally store references on the bot so cogs can access them
+# Optionally, store references on the bot so cogs can access them
 bot.db = db
 bot.logger = logger
 bot.guild_settings = guild_settings
@@ -44,7 +44,7 @@ bot.levels = levels
 bot.error_logs = error_logs
 bot.remote_config = remote_config
 
-# For your premium logic, store an in-memory set (refreshed by a task):
+# For premium logic (or other in-memory data)
 bot.premium_guilds = set()
 
 # Developer / Owner info
@@ -61,13 +61,12 @@ async def on_ready():
     except Exception as e:
         logger.error(f"Error syncing slash commands: {e}")
 
-    # You can do other startup logic here
-    # e.g., start background tasks, check DB connections, etc.
+    # Additional startup logic can be added here
+    # (e.g., starting background tasks, checking DB connections, etc.)
 
-
-# Optional: Log all slash command executions to your dev log
 @bot.event
 async def on_interaction(interaction: discord.Interaction):
+    """Logs every slash command interaction to the dev log channel."""
     try:
         if interaction.type == discord.InteractionType.application_command:
             dev_guild = bot.get_guild(DEV_GUILD_ID)
@@ -79,10 +78,18 @@ async def on_interaction(interaction: discord.Interaction):
                 return
 
             embed = discord.Embed(title="Slash Command Executed", color=discord.Color.blue())
-            embed.add_field(name="Command", value=interaction.command.name if interaction.command else "Unknown", inline=False)
+            embed.add_field(name="Command", value=(interaction.command.name if interaction.command else "Unknown"), inline=False)
             embed.add_field(name="Executed By", value=f"{interaction.user} ({interaction.user.id})", inline=False)
-            embed.add_field(name="Guild", value=f"{interaction.guild.name} ({interaction.guild.id})" if interaction.guild else "DM", inline=False)
-            embed.add_field(name="Channel", value=f"{interaction.channel.name} ({interaction.channel.id})" if interaction.channel else "DM", inline=False)
+            embed.add_field(
+                name="Guild", 
+                value=(f"{interaction.guild.name} ({interaction.guild.id})" if interaction.guild else "DM"), 
+                inline=False
+            )
+            embed.add_field(
+                name="Channel", 
+                value=(f"{interaction.channel.name} ({interaction.channel.id})" if interaction.channel else "DM"), 
+                inline=False
+            )
             await dev_log_channel.send(embed=embed)
     except Exception as e:
         logger.error(f"Failed to log slash command interaction: {e}")
@@ -104,10 +111,21 @@ INITIAL_EXTENSIONS = [
 ]
 
 async def main():
+    # Load each extension with error handling
     for ext in INITIAL_EXTENSIONS:
-        await bot.load_extension(ext)
-    await bot.start(os.getenv("DISCORD_TOKEN"))
+        try:
+            await bot.load_extension(ext)
+            logger.info(f"Loaded extension: {ext}")
+        except Exception as e:
+            logger.error(f"Failed to load extension {ext}: {e}")
+
+    # Ensure the DISCORD_TOKEN is set
+    token = os.getenv("DISCORD_TOKEN")
+    if not token:
+        logger.error("DISCORD_TOKEN not set in environment variables!")
+        return
+
+    await bot.start(token)
 
 if __name__ == "__main__":
     asyncio.run(main())
-
